@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokémon TCG Collector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .card-image {
+            transition: transform 0.3s ease, filter 0.3s ease;
+        }
+        .card-image.missing {
+            filter: grayscale(100%) brightness(0.7);
+        }
+        .card-image:hover {
+            transform: scale(1.05);
+            filter: grayscale(0%) brightness(1);
+            cursor: pointer;
+        }
+        /* Scrollbar subtile */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
+        
+        /* Classes utilitaires pour le mode Scroll */
+        .is-scroll {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            gap: 1.5rem !important;
+            padding: 1rem 0.5rem 1.5rem 0.5rem; /* Ajout de padding haut/bas pour le scale */
+            margin-top: -1rem; /* Compensation du padding */
+        }
+        .is-scroll .card-item {
+            flex: 0 0 140px !important;
+        }
+        @media (min-width: 768px) {
+            .is-scroll .card-item { flex: 0 0 180px !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans">
+
+    <!-- Header / Nav -->
+    <nav class="bg-gray-900 border-b border-gray-800 sticky top-0 z-50 p-4">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                PKMN Collection
+            </h1>
+            
+            <div class="flex items-center gap-2 w-full md:w-auto">
+                <input type="text" id="pokemonInput" placeholder="Pokémon..." 
+                    class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none flex-1 md:w-48 text-white text-sm">
+                <button onclick="importPokemon()" id="importBtn"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-colors flex items-center gap-2 font-bold shrink-0">
+                    <i class="fas fa-download"></i> <span class="hidden md:inline">Importer</span>
+                </button>
+                <button onclick="openManualModal()"
+                    class="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-700 transition-colors shrink-0">
+                    <i class="fas fa-plus"></i> <span class="hidden md:inline">Manuel</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-4 md:p-8">
+        
+        <!-- Stats & Filtres -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
+            <!-- Carte Progression & Valeur -->
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col justify-center">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-gray-400 font-bold uppercase text-xs tracking-widest">Ma Collection</span>
+                    <span id="statsCount" class="font-black text-blue-400 text-xl">0 / 0</span>
+                </div>
+                <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden mb-4">
+                    <div id="progressBar" class="h-full bg-blue-500 transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between items-end border-t border-gray-800 pt-4">
+                    <div>
+                        <div class="text-[10px] text-gray-500 font-bold uppercase mb-1">Estimation (US Market)</div>
+                        <div id="ownedValue" class="text-xl font-black text-green-400">0.00$</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] text-gray-500 font-bold uppercase mb-1">Reste à compléter</div>
+                        <div id="missingValue" class="text-sm font-bold text-gray-400">0.00$</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Carte Filtres & Tri -->
+            <div class="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col justify-between">
+                <div class="flex gap-2 p-1 bg-gray-800 rounded-xl mb-6">
+                    <button onclick="setFilter('all')" id="filter-all" class="flex-1 px-4 py-2 rounded-lg transition bg-blue-600 text-white text-sm font-bold">Toutes</button>
+                    <button onclick="setFilter('owned')" id="filter-owned" class="flex-1 px-4 py-2 rounded-lg transition hover:bg-gray-700 text-sm font-bold">Possédées</button>
+                    <button onclick="setFilter('missing')" id="filter-missing" class="flex-1 px-4 py-2 rounded-lg transition hover:bg-gray-700 text-sm font-bold">Manquantes</button>
+                </div>
+                <div class="flex justify-between items-center">
+                    <button onclick="toggleSortOrder()" class="text-xs text-gray-400 hover:text-white flex items-center gap-2 bg-gray-800 px-4 py-2 rounded-xl border border-gray-700 transition">
+                        <i class="fas fa-sort"></i> Tri : <span id="sortOrderText" class="font-bold text-gray-200">Ancien → Récent</span>
+                    </button>
+                    <button onclick="exportJSON()" class="text-xs text-gray-500 hover:text-gray-300 underline font-medium">
+                        Exporter JSON
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zone d'affichage des Pokémon -->
+        <div id="cardGrid" class="space-y-16">
+            <!-- Injecté par JS -->
+        </div>
+
+        <!-- Loader -->
+        <div id="loader" class="hidden fixed inset-0 bg-black/50 flex flex-col items-center justify-center z-[100]">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
+            <div id="loaderStatus" class="text-white font-bold bg-gray-900 px-6 py-2 rounded-full border border-gray-700 shadow-2xl">
+                Recherche en cours...
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Détails -->
+    <div id="detailsModal" class="fixed inset-0 bg-black/90 hidden flex items-center justify-center z-[70] p-4 backdrop-blur-sm" onclick="closeDetailsModal()">
+        <div class="bg-gray-900 border border-gray-800 rounded-3xl overflow-hidden max-w-4xl w-full flex flex-col md:flex-row shadow-2xl" onclick="event.stopPropagation()">
+            <div class="md:w-1/2 p-6 bg-gray-800/50 flex items-center justify-center">
+                <img id="d_img" src="" class="max-h-[70vh] rounded-xl shadow-2xl shadow-black">
+            </div>
+            <div class="md:w-1/2 p-8 overflow-y-auto max-h-[70vh] md:max-h-none">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 id="d_name" class="text-3xl font-black text-white"></h2>
+                        <p id="d_set_info" class="text-blue-400 font-medium"></p>
+                    </div>
+                    <button onclick="closeDetailsModal()" class="text-gray-500 hover:text-white text-2xl">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-6 text-gray-300">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
+                            <span class="block text-xs text-gray-500 uppercase font-bold mb-1">Rareté</span>
+                            <span id="d_rarity" class="text-sm"></span>
+                        </div>
+                        <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
+                            <span class="block text-xs text-gray-500 uppercase font-bold mb-1">Prix Market</span>
+                            <span id="d_price" class="text-sm text-green-400 font-bold"></span>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-800 p-3 rounded-xl border border-gray-700">
+                        <span class="block text-xs text-gray-500 uppercase font-bold mb-1">Artiste</span>
+                        <span id="d_artist" class="text-sm"></span>
+                    </div>
+
+                    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+                        <span class="block text-xs text-gray-500 uppercase font-bold mb-1">Description</span>
+                        <p id="d_flavor" class="italic text-sm text-gray-400"></p>
+                    </div>
+
+                    <div id="d_links" class="flex gap-4"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Manuel -->
+    <div id="manualModal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-[60] p-4">
+        <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl w-full max-w-lg shadow-2xl overflow-y-auto max-h-[90vh]">
+            <h2 class="text-xl font-bold mb-4 flex justify-between">
+                Ajout Manuel / Smart
+                <button onclick="closeManualModal()" class="text-gray-500 hover:text-white">&times;</button>
+            </h2>
+            
+            <div class="space-y-4">
+                <div class="bg-blue-900/20 p-4 rounded-xl border border-blue-500/30 mb-6">
+                    <label class="block text-xs font-bold text-blue-400 uppercase mb-2">Lien (Cardmarket ou Pokemontcg.io)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="m_link" placeholder="Collez l'URL ici..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm">
+                        <button onclick="smartFill()" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg text-xs font-bold">Parser</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-red-400 uppercase mb-1">Pokémon Associé (Requis) *</label>
+                        <input type="text" id="m_pkmn" placeholder="Ex: Tarsal" class="w-full bg-gray-800 border-2 border-red-900/30 focus:border-red-500 rounded-lg p-2 text-sm outline-none transition-colors">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Nom de la carte</label>
+                        <input type="text" id="m_name" placeholder="Ex: Wally's Training" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">URL de l'image</label>
+                    <input type="text" id="m_img" placeholder="https://..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm">
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Extension</label>
+                        <input type="text" id="m_set" placeholder="Sandstorm" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Numéro</label>
+                        <input type="text" id="m_num" placeholder="89/100" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Prix</label>
+                        <input type="text" id="m_price" placeholder="0.62$" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Rareté</label>
+                        <input type="text" id="m_rarity" placeholder="Uncommon" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">Artiste</label>
+                        <input type="text" id="m_artist" placeholder="Ken Sugimori" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Description (Flavor Text)</label>
+                    <textarea id="m_flavor" placeholder="..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm h-20"></textarea>
+                </div>
+                
+                <div class="flex gap-3 mt-6 pt-4 border-t border-gray-800">
+                    <button onclick="closeManualModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 p-3 rounded-lg">Annuler</button>
+                    <button onclick="submitManualAdd()" class="flex-1 bg-blue-600 hover:bg-blue-700 p-3 rounded-lg font-bold shadow-lg shadow-blue-900/20">Ajouter à la collection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
